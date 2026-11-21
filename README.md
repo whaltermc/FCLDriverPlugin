@@ -1,72 +1,93 @@
-# FCLDriverPlugin
+# FCLDriverPlugin — PanVK (Mali)
 
-FoldCraftLauncher（FCL）的自定义 Vulkan 驱动插件模板。把驱动 `.so` 按本模板打包成 APK 安装，即可在 FCL 的「版本设置 → 驱动」中选择使用。
+A [FoldCraftLauncher](https://github.com/FCL-Team/FoldCraftLauncher) (FCL) driver plugin that bundles **PanVK**, Mesa's open-source Vulkan driver for **Arm Mali** GPUs, packaged as an installable APK. After installing, select it in FCL under *Version Settings → Driver*.
 
-A driver plugin template for FoldCraftLauncher. Package a Vulkan driver's `.so` files into an APK with this template and select it in FCL under *Version Settings → Driver*.
+## Bundled driver
 
-## 插件契约 / Plugin contract
+- **Driver:** PanVK Mali (Bifrost & Valhall, kbase) — **r10**, tag [v1.6.0](https://github.com/JimVulkan/mali-panvk/releases/tag/v1.6.0) of [JimVulkan/mali-panvk](https://github.com/JimVulkan/mali-panvk)
+- **Base:** Mesa 27.0.0-devel (commit `58f2c55`), Vulkan 1.3.363
+- **Library:** `libvulkan_panfrost.so` (arm64-v8a only)
+- **Package:** `mali-panvk-27.0.0-devel-r10.zip`, sha256 `7e97db4d79d81ec9461d1e0676b62a865561cb56e21c151693aa25ffbe749f1c`
 
-FCL 通过插件 APK 的 manifest metaData 识别驱动插件：
+PanVK runs on the **stock Arm kbase kernel driver** (`/dev/mali0`) that production Mali devices already ship: **no root and no custom kernel required**. Upstream Mesa panvk only supports the mainline panfrost/panthor kernel drivers; the kbase port is what makes it usable on retail phones and tablets.
+
+### Supported GPUs
+
+| Architecture | GPUs | Vulkan |
+|---|---|---|
+| Bifrost | Mali-G31, G51, G52, G71, G72, G76 | 1.4 (1.3 on the G71 and others with fewer than 8 colour attachments) |
+| Valhall, first generation | Mali-G57, G68, G77, G78 | 1.4 |
+| Valhall / 5th gen with the command stream frontend | Mali-G610, G710, G615, G715, G720, Immortalis-G925, Mali-G1-Ultra | 1.4 (G610, G710, G715 untested) |
+
+Tested by upstream on: Galaxy S10e (Mali-G76, Exynos 9820) and Galaxy Tab S10 Ultra (Immortalis-G720, Dimensity 9300+).
+
+### Requirements
+
+- Android 12 (API 31) or newer, 64-bit device.
+- A device with a supported Mali GPU (the plugin declares `mali`; FCL will fall back to the system driver on other GPUs).
+- An FCL build with generic custom driver support (`driver_lib` / `driver_gpu`; older builds that only bundle Turnip ignore these keys).
+
+### Known limitations (from upstream)
+
+- No depth bounds test and no 64-bit floats in shaders (Mali has no hardware for either).
+- Direct3D 12 (via DXVK/vkd3d-style layers) tops out at feature level 11.1; unbounded (bindless) descriptor ranges do not start on Bifrost.
+- Pipeline statistics queries do not count indirect draws or fragment shader invocations.
+- No mesh shaders (no Bifrost or Valhall GPU has them in hardware).
+- On devices with 4 GB RAM or less, give Minecraft about 600 MB of Java heap.
+
+## Plugin contract
 
 FCL identifies driver plugins through manifest metadata:
 
-| metaData | 说明 / Description | 示例 / Example | 缺省 / Default |
-|---|---|---|---|
-| `fclPlugin` | 固定为 `true` / must be `true` | `true` | 必填 / required |
-| `driver` | 启动器内显示的驱动名 / display name in the launcher | `Turnip 24.3.2`、`PanVK 26.3` | 必填 / required |
-| `driver_lib` | 驱动库文件名，须存在于 APK 的 jniLibs 中 / driver library file name, must exist in the APK's jniLibs | `libvulkan_freedreno.so`、`libvulkan_panfrost.so` | `libvulkan_freedreno.so` |
-| `driver_gpu` | 驱动适配的 GPU 家族 / the GPU family the driver targets：`adreno` / `mali` / `any` | panvk 填 `mali` | `adreno` |
+| metaData | Description | Value in this plugin |
+|---|---|---|
+| `fclPlugin` | Must be `true` | `true` |
+| `driver` | Display name in the launcher | `PanVK 27.0.0 r10` |
+| `driver_lib` | Driver library file name, must exist in the APK's jniLibs | `libvulkan_panfrost.so` |
+| `driver_gpu` | GPU family the driver targets: `adreno` / `mali` / `any` | `mali` |
 
-以上值均经 `app/build.gradle.kts` 的 `manifestPlaceholders` 配置，模板已内置 Turnip 示例值，开箱即可构建。
+All values are configured via `manifestPlaceholders` in `app/build.gradle.kts`.
 
-All values are configured via `manifestPlaceholders` in `app/build.gradle.kts`. The template ships with Turnip values and builds out of the box.
+> **Note:** Mesa's panvk ICD library is named **`libvulkan_panfrost.so`**, not `libvulkan_panvk.so`.
 
-## 制作驱动插件 / Building a driver plugin
+## Building the plugin
 
-1. **放入驱动库 / Add the driver libraries**
-   把驱动 `.so` 放入 `app/src/main/jniLibs/arm64-v8a/`，驱动依赖的其他 `.so` 一并放入。
-   Put the driver `.so` into `app/src/main/jniLibs/arm64-v8a/`, together with any `.so` it depends on.
-   - Turnip（Adreno）：`libvulkan_freedreno.so`
-   - panvk（Mali）：**`libvulkan_panfrost.so`**（Mesa panvk 的 ICD 库名沿用 panfrost，注意不是 `libvulkan_panvk.so` / Mesa's panvk ICD is named after panfrost, not `libvulkan_panvk.so`）
-
-2. **修改 `app/build.gradle.kts` / Edit `app/build.gradle.kts`**
-
-   ```kotlin
-   //应用名
-   //app name
-   resValue("string","app_name","PanVK 26.3")
-   //包名后缀（每个驱动唯一，多个插件可共存）
-   //package name Suffix (unique per driver so multiple plugins can coexist)
-   applicationIdSuffix = ".panvk263"
-
-   manifestPlaceholders["driver"] = "PanVK 26.3"
-   manifestPlaceholders["driverLib"] = "libvulkan_panfrost.so"
-   manifestPlaceholders["driverGpu"] = "mali"
-   ```
-
-3. **构建并安装 / Build and install**
+1. The driver library is already in place at `app/src/main/jniLibs/arm64-v8a/libvulkan_panfrost.so`. To use a different build, replace it there.
+2. (Optional) Adjust the display name, package suffix, and placeholders in `app/build.gradle.kts`.
+3. Build:
 
    ```bash
    ./gradlew assembleRelease
    ```
 
-   安装生成的 APK，在 FCL「版本设置 → 驱动」中选择该驱动。
-   Install the APK and pick the driver in FCL under *Version Settings → Driver*.
+4. Install the generated APK (`app/release/` / `app/build/outputs/apk/`), then pick the driver in FCL under *Version Settings → Driver*.
 
-## FCL 如何加载驱动 / How FCL loads the driver
+## How FCL loads the driver
 
-- FCL 把插件解压出的 native 库目录作为 `DRIVER_PATH` 传入游戏进程，linkerhook 拦截 libvulkan 加载器的 `android_dlopen_ext`，按 `driver_lib` 从该目录加载驱动库。
-  FCL passes the plugin's extracted native library directory as `DRIVER_PATH` to the game process; a linker hook intercepts the Vulkan loader's `android_dlopen_ext` and loads the library named by `driver_lib` from that directory.
-- 仅当设备 GPU 家族与 `driver_gpu` 匹配时才启用自定义驱动路径，否则回落系统驱动。
-  The custom driver path is only engaged when the device's GPU family matches `driver_gpu`; otherwise the system driver is used.
-- 启动前的「检测 Vulkan」会按实际枚举到的版本/扩展/特性评估各 MC 版本的支持情况；驱动初始化失败时自动回落系统驱动并提示。
-  The pre-launch Vulkan check evaluates per-MC-version support from the actually enumerated version/extensions/features; if driver initialization fails, FCL falls back to the system driver and says so.
-- `driver_lib` / `driver_gpu` 需要支持自定义驱动加载的 FCL 版本（仅内置 Turnip 的旧版本会忽略这两个键）。
-  `driver_lib` / `driver_gpu` require an FCL build with generic custom driver support (older builds that only bundle Turnip ignore these keys).
+- FCL passes the plugin's extracted native library directory as `DRIVER_PATH` to the game process; a linker hook intercepts the Vulkan loader's `android_dlopen_ext` and loads the library named by `driver_lib` from that directory.
+- The custom driver path is only engaged when the device's GPU family matches `driver_gpu`; otherwise the system driver is used.
+- The pre-launch Vulkan check evaluates per-MC-version support from the actually enumerated version/extensions/features; if driver initialization fails, FCL falls back to the system driver and says so.
 
-## 参考 / Reference
+## Adapting this template to other drivers
 
-- Turnip 驱动构建 / Turnip builds: [K11MCH1/AdrenoToolsDrivers](https://github.com/K11MCH1/AdrenoToolsDrivers)
-- panvk（Mali，kbase 内核）: [zenithblue-oss/panvk-kbase-android](https://github.com/zenithblue-oss/panvk-kbase-android)、[FristOneRR-Panvk-Driver](https://github.com/FristOneRR/FristOneRR-Panvk-Driver)
-  （上游 Mesa panvk 仅支持 panfrost/panthor 主线内核；量产 Mali 设备为 mali_kbase，需使用上述移植构建 / upstream Mesa panvk only supports the panfrost/panthor mainline kernel drivers, while production Mali devices ship mali_kbase — use the kbase ports above）
-- 相关 issue / Related issues: [FoldCraftLauncher #1614](https://github.com/FCL-Team/FoldCraftLauncher/issues/1614)、[#1937](https://github.com/FCL-Team/FoldCraftLauncher/issues/1937)
+To package a different Vulkan driver with this template, edit `app/build.gradle.kts`:
+
+```kotlin
+resValue("string","app_name","<Driver name>")          // app name
+applicationIdSuffix = ".<unique-suffix>"                // unique per driver so multiple plugins can coexist
+
+manifestPlaceholders["driver"] = "<Driver name>"        // display name in the launcher
+manifestPlaceholders["driverLib"] = "<driver .so>"      // must exist under src/main/jniLibs/<abi>/
+manifestPlaceholders["driverGpu"] = "adreno|mali|any"   // target GPU family
+```
+
+## References
+
+- PanVK driver builds (this bundle): [JimVulkan/mali-panvk](https://github.com/JimVulkan/mali-panvk) — [v1.6.0 / r10 release notes](https://github.com/JimVulkan/mali-panvk/releases/tag/v1.6.0)
+- Other kbase-port panvk builds: [zenithblue-oss/panvk-kbase-android](https://github.com/zenithblue-oss/panvk-kbase-android), [FristOneRR/FristOneRR-Panvk-Driver](https://github.com/FristOneRR/FristOneRR-Panvk-Driver)
+- Turnip (Adreno) driver builds: [K11MCH1/AdrenoToolsDrivers](https://github.com/K11MCH1/AdrenoToolsDrivers)
+- Related FCL issues: [#1614](https://github.com/FCL-Team/FoldCraftLauncher/issues/1614), [#1937](https://github.com/FCL-Team/FoldCraftLauncher/issues/1937)
+
+## License
+
+The bundled `libvulkan_panfrost.so` is built from Mesa (MIT) with kbase-port changes by JimVulkan; its full third-party notice is shipped in [`app/src/main/assets/NOTICE.txt`](app/src/main/assets/NOTICE.txt).

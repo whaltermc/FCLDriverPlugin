@@ -8,7 +8,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(TextView(this).apply {
-            text = "Plugin"
+            text = "PanVK driver plugin (Mesa 27.0.0-devel, r10)"
         })
     }
 }

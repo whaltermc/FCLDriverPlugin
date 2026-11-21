@@ -9,10 +9,11 @@ android {
 
     defaultConfig {
         applicationId = "com.mio.plugin.renderer"
-        minSdk = 26
+        //PanVK r10 requires Android 12 (API 31) or newer
+        minSdk = 31
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.6.0"
     }
 
     buildTypes {
@@ -20,22 +21,17 @@ android {
             isMinifyEnabled = false
         }
         configureEach {
-            //应用名
-            //app name
-            resValue("string","app_name","Turnip 24.3.2")
-            //包名后缀
-            //package name Suffix
-            applicationIdSuffix = ".turnip2432"
+            //App name
+            resValue("string","app_name","PanVK 27.0.0 r10")
+            //Package name suffix
+            applicationIdSuffix = ".panvk27r10"
 
-            //驱动在启动器内显示的名称
-            //The name displayed by the driver in the launcher
-            manifestPlaceholders["driver"] = "Turnip 24.3.2"
-            //驱动库文件名（须存在于 src/main/jniLibs/<abi>/ 下）
+            //Driver name displayed in the launcher
+            manifestPlaceholders["driver"] = "PanVK 27.0.0 r10"
             //Driver library file name (must exist under src/main/jniLibs/<abi>/)
-            manifestPlaceholders["driverLib"] = "libvulkan_freedreno.so"
-            //驱动适配的 GPU 家族：adreno / mali / any
+            manifestPlaceholders["driverLib"] = "libvulkan_panfrost.so"
             //The GPU family the driver targets: adreno / mali / any
-            manifestPlaceholders["driverGpu"] = "adreno"
+            manifestPlaceholders["driverGpu"] = "mali"
         }
     }
     compileOptions {
