@@ -22,8 +22,8 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # The ubuntu-latest runner ships the Android SDK with licenses pre-accepted;
+      # AGP auto-installs any missing platform/build-tools.
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
