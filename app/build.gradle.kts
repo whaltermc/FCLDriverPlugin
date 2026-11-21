@@ -16,9 +16,29 @@ android {
         versionName = "1.6.0"
     }
 
+    signingConfigs {
+        create("release") {
+            //Populated by CI (see .github/workflows/build.yml); falls back to the debug key below
+            val storePath = System.getenv("KEYSTORE_PATH")
+            if (storePath != null && file(storePath).exists()) {
+                storeFile = file(storePath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            val storePath = System.getenv("KEYSTORE_PATH")
+            signingConfig = if (storePath != null && file(storePath).exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                //local builds: sign with the auto-generated debug keystore so the APK installs
+                signingConfigs.getByName("debug")
+            }
         }
         configureEach {
             //App name
